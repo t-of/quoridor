@@ -122,7 +122,7 @@ function newGame(vsCpu) {
     wallsLeft: [START_WALLS, START_WALLS],
     walls: new Set(),
     turn: 0,
-    preview: null,                 // { orient, r, c }
+    sel: null,                     // 選んだ溝 { o, a, b }（壁置きの 1 つ目）
     over: false,
     winner: null,
   };
@@ -140,14 +140,14 @@ function doMove(pIdx, to) {
     playTone(440, 0.05);
     state.turn = 1 - state.turn;
   }
-  state.preview = null;
+  state.sel = null;
 }
 
 function doWall(pIdx, orient, r, c) {
   state.walls.add(wallSpan(orient, r, c)[1]);
   state.wallsLeft[pIdx] -= 1;
   state.turn = 1 - state.turn;
-  state.preview = null;
+  state.sel = null;
   playTone(220, 0.07);
 }
 
@@ -223,23 +223,20 @@ function render() {
       html += `<div class="${classes.join(' ')}" style="grid-row:${track(i)};grid-column:${track(j)}" data-r="${i}" data-c="${j}">${inner}</div>`;
     }
   }
+  // 溝（壁置き場）。data-e="o,a,b": 'v' は行 a の列 b/b+1 の間、'h' は行 a/a+1 の間の列 b
+  const sel = state.sel;
+  const gap = (o, a, b, has, row, col) => {
+    const on = sel && sel.o === o && sel.a === a && sel.b === b ? ' sel' : '';
+    return `<div class="gap gap-${o}${has ? ' wall' : on}" style="grid-row:${row};grid-column:${col}" data-e="${o},${a},${b}"></div>`;
+  };
   for (let i = 0; i < N; i++) {
-    for (let c = 0; c < 8; c++) { // 縦の溝（壁は横向きにここを埋める）
-      const has = state.walls.has(`v:${i}:${c}`) || state.walls.has(`v:${i - 1}:${c}`);
-      const prev = previewCovers('v', i, c, 'col');
-      html += `<div class="gap${has ? ' wall' : prev}" style="grid-row:${track(i)};grid-column:${track(c) + 1}"></div>`;
+    for (let c = 0; c < 8; c++) {
+      html += gap('v', i, c, state.walls.has(`v:${i}:${c}`) || state.walls.has(`v:${i - 1}:${c}`), track(i), track(c) + 1);
     }
   }
   for (let r = 0; r < 8; r++) {
-    for (let j = 0; j < N; j++) { // 横の溝
-      const has = state.walls.has(`h:${r}:${j}`) || state.walls.has(`h:${r}:${j - 1}`);
-      const prev = previewCovers('h', r, j, 'row');
-      html += `<div class="gap${has ? ' wall' : prev}" style="grid-row:${track(r) + 1};grid-column:${track(j)}"></div>`;
-    }
-  }
-  for (let r = 0; r < 8; r++) {
-    for (let c = 0; c < 8; c++) { // 交点（壁を置くタップ対象）
-      html += `<div class="gap xpt" style="grid-row:${track(r) + 1};grid-column:${track(c) + 1}" data-x="${r},${c}"></div>`;
+    for (let j = 0; j < N; j++) {
+      html += gap('h', r, j, state.walls.has(`h:${r}:${j}`) || state.walls.has(`h:${r}:${j - 1}`), track(r) + 1, track(j));
     }
   }
   $board.innerHTML = html;
@@ -254,57 +251,37 @@ function render() {
   }
 }
 
-// 壁のプレビュー（その溝がプレビュー中の壁に含まれるかどうかの表示クラス）
-function previewCovers(orient, idx, pos, axis) {
-  if (!state.preview || state.preview.orient !== orient) return '';
-  const { r, c } = state.preview;
-  const covered = orient === 'v'
-    ? (axis === 'col' && pos === c && (idx === r || idx === r + 1))
-    : (axis === 'row' && idx === r && (pos === c || pos === c + 1));
-  if (!covered) return '';
-  const ok = wallLegal(state.walls, state.pos, orient, r, c);
-  return ok ? ' preview-ok' : ' preview';
-}
-
 // ---- 操作 ----
 
-// マスをタップ → 進む。交点をタップ → 壁の仮置き、同じ交点をもう一度 → 向きを変える、すばやく 2 回 → 置く。
-// dblclick は iOS で来ないことがあるので、同じ交点への 350ms 以内の 2 回目を自分で見る。
-let lastTap = null; // { key, at, before }（before: 1 回目のタップの前に出ていた仮置き）
+// マスをタップ → 進む。隣り合う溝を 2 つ続けてタップ → その 2 つをふさぐ壁を置く。
+// 2 つの溝が同じ線の上で隣り合っていれば、壁の向きと位置が 1 つに決まる。
+function wallFromEdges(x, y) {
+  if (x.o !== y.o) return null;
+  if (x.o === 'v' && x.b === y.b && Math.abs(x.a - y.a) === 1) return { orient: 'v', r: Math.min(x.a, y.a), c: x.b };
+  if (x.o === 'h' && x.a === y.a && Math.abs(x.b - y.b) === 1) return { orient: 'h', r: x.a, c: Math.min(x.b, y.b) };
+  return null;
+}
 
 $board.addEventListener('click', (e) => {
   if (state.over) return;
   const myTurn = !state.vsCpu || state.turn === 0;
   if (!myTurn) return;
+  const edgeEl = e.target.closest('[data-e]');
   const cellEl = e.target.closest('[data-r]');
-  const xEl = e.target.closest('[data-x]');
-  if (xEl) {
-    if (state.wallsLeft[state.turn] <= 0) return;
-    const [r, c] = xEl.dataset.x.split(',').map(Number);
-    const key = xEl.dataset.x;
-    const now = performance.now();
-    if (lastTap && lastTap.key === key && now - lastTap.at < 350) {
-      // 2 回目のタップ: 1 回目で向きを変えていたら戻してから置く
-      const orient = lastTap.before && lastTap.before.r === r && lastTap.before.c === c ? lastTap.before.orient : state.preview.orient;
-      lastTap = null;
-      if (wallLegal(state.walls, state.pos, orient, r, c)) {
-        doWall(state.turn, orient, r, c);
-        render();
-        afterTurn();
-      } else {
-        state.preview = { orient, r, c };
-        render();
-      }
+  if (edgeEl) {
+    if (state.wallsLeft[state.turn] <= 0 || edgeEl.classList.contains('wall')) return;
+    const [o, a, b] = edgeEl.dataset.e.split(',');
+    const edge = { o, a: Number(a), b: Number(b) };
+    const sel = state.sel;
+    const w = sel && wallFromEdges(sel, edge);
+    if (w && wallLegal(state.walls, state.pos, w.orient, w.r, w.c)) {
+      doWall(state.turn, w.orient, w.r, w.c);
+      render();
+      afterTurn();
       return;
     }
-    lastTap = { key, at: now, before: state.preview };
-    if (state.preview && state.preview.r === r && state.preview.c === c) {
-      state.preview = { orient: state.preview.orient === 'v' ? 'h' : 'v', r, c };
-    } else {
-      // 新しい交点: 縦が置けなければ横を出す
-      const orient = !wallLegal(state.walls, state.pos, 'v', r, c) && wallLegal(state.walls, state.pos, 'h', r, c) ? 'h' : 'v';
-      state.preview = { orient, r, c };
-    }
+    // 同じ溝なら選び直し、それ以外（離れている・置けない）はこの溝を 1 つ目にする
+    state.sel = sel && sel.o === edge.o && sel.a === edge.a && sel.b === edge.b ? null : edge;
     render();
   } else if (cellEl) {
     const r = Number(cellEl.dataset.r), c = Number(cellEl.dataset.c);
@@ -313,8 +290,8 @@ $board.addEventListener('click', (e) => {
       doMove(state.turn, [r, c]);
       render();
       afterTurn();
-    } else if (state.preview) {
-      state.preview = null;
+    } else if (state.sel) {
+      state.sel = null;
       render();
     }
   }

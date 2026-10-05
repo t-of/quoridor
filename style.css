@@ -120,17 +120,13 @@ button { font: inherit; color: inherit; }
 
 .gap { background: transparent; }
 .gap.wall { background: #ff6b6b; border-radius: 2px; }
-.gap.preview { background: rgba(255, 107, 107, 0.5); }
-.gap.preview-ok { background: rgba(120, 220, 140, 0.7); }
+.gap.sel { background: rgba(120, 220, 140, 0.8); border-radius: 2px; }
 
-.xpt { position: relative; z-index: 1; cursor: pointer; }
-.xpt::after {
-  content: '';
-  position: absolute;
-  top: 50%; left: 50%;
-  width: 26px; height: 26px;
-  transform: translate(-50%, -50%);
-}
+/* 溝は細いので、タップできる広さをマスの縁まで広げる */
+.gap[data-e] { position: relative; z-index: 1; cursor: pointer; }
+.gap[data-e]::after { content: ''; position: absolute; inset: 0; }
+.gap-v::after { left: -6px; right: -6px; }
+.gap-h::after { top: -6px; bottom: -6px; }
 
 .screen.overlay {
   position: absolute;
