@@ -43,8 +43,10 @@ button { font: inherit; color: inherit; }
 }
 .stage {
   flex: 1;
+  min-height: 0;
   position: relative;
   display: grid;
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
   place-items: center;
   touch-action: manipulation;   /* ダブルタップ拡大を止める */
   user-select: none;
@@ -97,8 +99,9 @@ button { font: inherit; color: inherit; }
 .info__turn { color: var(--muted); }
 .info__hint { color: var(--muted); font-size: 12px; text-align: right; }
 
-.board3d { width: 100%; flex: 1; min-height: 200px; }
-.board3d__canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: grab; }
+.board3d { position: relative; width: 100%; flex: 1; min-height: 200px; }
+/* canvas の画素数が枠の高さに効いて縦にはみ出さないよう、枠から浮かせる */
+.board3d__canvas { position: absolute; inset: 0; display: block; width: 100%; height: 100%; touch-action: none; cursor: grab; }
 
 .screen.overlay {
   position: absolute;
