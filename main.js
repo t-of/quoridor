@@ -118,9 +118,10 @@ function allLegalWalls(walls, pos) {
 
 let state = null;
 
-function newGame(vsCpu) {
+// mode: 'cpu'（CPU と対戦）/ 'pvp'（2人）/ 'watch'（CPU 同士）/ 'demo'（ホームに飾る盤。触れない）
+function newGame(mode) {
   state = {
-    vsCpu,
+    mode,
     pos: [[8, 4], [0, 4]],         // 0: 自分（下端中央、ゴールは行 0）／1: 相手（上端中央、ゴールは行 8）
     wallsLeft: [START_WALLS, START_WALLS],
     walls: new Set(),
@@ -130,6 +131,16 @@ function newGame(vsCpu) {
     winner: null,
   };
 }
+
+// ホームに飾る、対局の途中の盤
+function demoGame() {
+  newGame('demo');
+  state.pos = [[5, 3], [3, 5]];
+  state.walls = new Set(['h:4:2', 'h:5:5', 'v:6:1', 'h:2:3', 'v:2:5']);
+  state.wallsLeft = [7, 8];
+}
+
+function isCpu(p) { return state.mode === 'watch' || (state.mode === 'cpu' && p === 1); }
 
 function goalRow(pIdx) { return pIdx === 0 ? 0 : 8; }
 
@@ -166,8 +177,8 @@ function cpuTurn() {
   cpu.onmessage = (e) => {
     if (e.data.id !== cpuAsk || state !== game) return;
     const a = e.data.action;
-    if (a.type === 'move') doMove(1, [a.r, a.c]);
-    else doWall(1, a.orient, a.r, a.c);
+    if (a.type === 'move') doMove(game.turn, [a.r, a.c]);
+    else doWall(game.turn, a.orient, a.r, a.c);
     render();
     afterTurn();
   };
@@ -177,13 +188,14 @@ function cpuTurn() {
     wallsLeft: state.wallsLeft,
     walls: [...state.walls],
     turn: state.turn,
-    timeMs: 1500,
+    timeMs: state.mode === 'watch' ? 900 : 1500,
   });
 }
 
 function afterTurn() {
-  if (!state.over && state.vsCpu && state.turn === 1) {
-    setTimeout(cpuTurn, 450);
+  const game = state;
+  if (!state.over && isCpu(state.turn)) {
+    setTimeout(() => { if (state === game) cpuTurn(); }, 450);
   }
 }
 
@@ -198,16 +210,20 @@ const $wallsBottom = document.getElementById('wallsBottom');
 const $turnLabel = document.getElementById('turnLabel');
 const $resultText = document.getElementById('resultText');
 
+function playerLabel(p) {
+  if (state.mode === 'cpu') return p === 0 ? 'あなた' : 'CPU ';
+  if (state.mode === 'watch') return `CPU ${p + 1} `;
+  return `プレイヤー${p + 1}`;
+}
+
 function render() {
   $wallsTop.textContent = state.wallsLeft[1];
   $wallsBottom.textContent = state.wallsLeft[0];
-  $turnLabel.textContent = state.over ? '' : (state.vsCpu ? (state.turn === 0 ? 'あなたの番' : 'CPU の番') : (state.turn === 0 ? 'プレイヤー1の番' : 'プレイヤー2の番'));
+  $turnLabel.textContent = state.over ? '' : `${playerLabel(state.turn)}の番`;
   syncScene();
 
   if (state.over) {
-    $resultText.textContent = state.vsCpu
-      ? (state.winner === 0 ? 'あなたの勝ち！' : 'CPU の勝ち')
-      : `プレイヤー${state.winner + 1}の勝ち！`;
+    $resultText.textContent = state.mode === 'cpu' && state.winner === 1 ? 'CPU の勝ち' : `${playerLabel(state.winner)}の勝ち！`;
     $result.hidden = false;
   } else {
     $result.hidden = true;
@@ -226,8 +242,7 @@ function wallFromEdges(x, y) {
 }
 
 function tapCell(r, c) {
-  const myTurn = !state.vsCpu || state.turn === 0;
-  if (state.over || !myTurn) return;
+  if (state.over || state.mode === 'demo' || isCpu(state.turn)) return;
   const ok = legalMoves(state.walls, state.pos, state.turn).some(([i, j]) => i === r && j === c);
   if (ok) {
     doMove(state.turn, [r, c]);
@@ -240,8 +255,7 @@ function tapCell(r, c) {
 }
 
 function tapEdge(o, a, b) {
-  const myTurn = !state.vsCpu || state.turn === 0;
-  if (state.over || !myTurn) return;
+  if (state.over || state.mode === 'demo' || isCpu(state.turn)) return;
   const has = o === 'v' ? (state.walls.has(`v:${a}:${b}`) || state.walls.has(`v:${a - 1}:${b}`)) : (state.walls.has(`h:${a}:${b}`) || state.walls.has(`h:${a}:${b - 1}`));
   if (state.wallsLeft[state.turn] <= 0 || has) return;
   const edge = { o, a, b };
@@ -417,8 +431,7 @@ function buildPieces() {
 }
 
 function syncScene() {
-  const myTurn = !state.vsCpu || state.turn === 0;
-  const legal = (myTurn && !state.over) ? legalMoves(state.walls, state.pos, state.turn) : [];
+  const legal = (!isCpu(state.turn) && !state.over) ? legalMoves(state.walls, state.pos, state.turn) : [];
   const legalKeys = new Set(legal.map(([i, j]) => `${i},${j}`));
   for (const m of cellMeshes) {
     const { r, c } = m.userData;
@@ -470,21 +483,35 @@ canvas.addEventListener('pointerup', (e) => {
   else tapEdge(d.o, d.a, d.b);
 });
 
-document.querySelectorAll('[data-start]').forEach((btn) => {
-  btn.addEventListener('click', () => {
-    newGame(btn.dataset.start === 'cpu');
-    $start.hidden = true;
-    $game.hidden = false;
-    $result.hidden = true;
-    $board3d.appendChild(canvas);
-    render();
-  });
-});
+const $homeBtn = document.getElementById('homeBtn');
 
-document.getElementById('againBtn').addEventListener('click', () => {
-  newGame(state.vsCpu);
+function startGame(mode) {
+  newGame(mode);
+  $start.hidden = true;
+  $game.hidden = false;
+  $homeBtn.hidden = false;
+  $board3d.appendChild(canvas);
   render();
+  afterTurn();
+}
+
+function goHome() {
+  demoGame();
+  $start.hidden = false;
+  $game.hidden = true;
+  $result.hidden = true;
+  $homeBtn.hidden = true;
+  document.getElementById('homeBoard').appendChild(canvas);
+  syncScene();
+}
+
+document.querySelectorAll('[data-start]').forEach((btn) => {
+  btn.addEventListener('click', () => startGame(btn.dataset.start));
 });
+document.getElementById('againBtn').addEventListener('click', () => startGame(state.mode));
+$homeBtn.addEventListener('click', goHome);
+document.getElementById('resultHomeBtn').addEventListener('click', goHome);
+goHome();
 
 // ---- 効果音（Web Audio。マナーモードでも鳴らす） ----
 

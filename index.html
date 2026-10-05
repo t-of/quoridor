@@ -35,17 +35,20 @@
     <header class="bar">
       <h1 class="bar__title">quoridor</h1>
       <div class="bar__actions">
+        <button class="pill" id="homeBtn" hidden>ホーム</button>
         <button class="pill" data-wak="install" hidden>アプリにする</button>
         <button class="pill" data-wak="share">共有</button>
       </div>
     </header>
 
     <section class="stage" id="stage">
-      <div id="start" class="screen">
+      <div id="start" class="screen screen--start">
         <h2 class="title">quoridor</h2>
         <p class="sub">9×9の盤で先に向こう岸へ</p>
+        <div class="board3d" id="homeBoard"></div>
         <button class="big" data-start="cpu">CPU と対戦</button>
         <button class="big" data-start="pvp">2人で対戦（同じ端末）</button>
+        <button class="big" data-start="watch">CPU 同士の対戦を見る</button>
       </div>
 
       <div id="game" class="screen screen--game" hidden>
@@ -65,6 +68,7 @@
       <div id="result" class="screen overlay" hidden>
         <h2 id="resultText"></h2>
         <button class="big" id="againBtn">もう一度</button>
+        <button class="big" id="resultHomeBtn">ホームに戻る</button>
       </div>
     </section>
 
