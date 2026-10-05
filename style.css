@@ -1,0 +1,140 @@
+:root {
+  --bg: #2b2420;
+  --fg: #eceef3;
+  --muted: #9aa0ab;
+  --accent: #ffd35c;
+}
+
+* { box-sizing: border-box; }
+
+/* Safari 26 の上下バーの色は html の背景から取られる。body と同じ色にしておく */
+html { background-color: var(--bg); -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background-color: var(--bg);
+  color: var(--fg);
+  font-family: system-ui, -apple-system, 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+  -webkit-tap-highlight-color: transparent;
+}
+button { font: inherit; color: inherit; }
+[hidden] { display: none !important; }
+
+/* 画面の端に置くものはセーフエリアの分だけ内側に。高さは 100vh ではなく 100dvh */
+.app {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  padding:
+    max(12px, env(safe-area-inset-top))
+    max(12px, env(safe-area-inset-right))
+    max(12px, env(safe-area-inset-bottom))
+    max(12px, env(safe-area-inset-left));
+}
+.bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.bar__title { margin: 0; font-size: 18px; }
+.bar__actions { display: flex; gap: 8px; }
+.pill {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.stage {
+  flex: 1;
+  position: relative;
+  display: grid;
+  place-items: center;
+  touch-action: manipulation;   /* ダブルタップ拡大を止める */
+  user-select: none;
+  -webkit-user-select: none;
+}
+.credit { text-align: center; font-size: 12px; color: var(--muted); }
+.credit a { color: inherit; }
+
+/* 全画面のオーバーレイは opacity ではなく display: none で隠す */
+
+.screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+}
+.screen[hidden] { display: none; }
+
+.title { margin: 0; font-size: 28px; letter-spacing: 0.02em; }
+.sub { margin: 0; color: var(--muted); font-size: 14px; }
+
+.big {
+  width: min(84vw, 320px);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--fg);
+  border-radius: 14px;
+  padding: 14px;
+  font-size: 16px;
+  cursor: pointer;
+}
+.big:active { background: rgba(255, 255, 255, 0.14); }
+
+.info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: min(92vw, 420px);
+  font-size: 14px;
+  gap: 8px;
+}
+.info__walls b { color: var(--accent); }
+.info__turn { color: var(--muted); }
+.modebar { display: flex; gap: 8px; }
+
+/* 盤：9 マス + マスの間の溝（壁置き場）を交互に並べた 17 本の目盛り */
+.board {
+  --gap: 7px;
+  width: min(92vw, 420px);
+  aspect-ratio: 1;
+  display: grid;
+  grid-template-columns: repeat(8, 1fr var(--gap)) 1fr;
+  grid-template-rows: repeat(8, 1fr var(--gap)) 1fr;
+  position: relative;
+}
+
+.cell {
+  position: relative;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 3px;
+}
+.cell.goal0 { background: rgba(255, 211, 92, 0.12); }
+.cell.goal1 { background: rgba(120, 180, 255, 0.12); }
+.cell.legal { background: rgba(120, 220, 140, 0.35); }
+.cell .piece {
+  position: absolute;
+  inset: 12%;
+  border-radius: 50%;
+}
+.cell .piece.p0 { background: var(--accent); }
+.cell .piece.p1 { background: #6fb3ff; }
+
+.gap { background: transparent; }
+.gap.wall { background: #ff6b6b; border-radius: 2px; }
+.gap.preview { background: rgba(255, 107, 107, 0.5); }
+.gap.preview-ok { background: rgba(120, 220, 140, 0.7); }
+
+.xpt { position: relative; }
+.xpt::after {
+  content: '';
+  position: absolute;
+  top: 50%; left: 50%;
+  width: 22px; height: 22px;
+  transform: translate(-50%, -50%);
+}
+
+.screen.overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(10, 8, 6, 0.82);
+  justify-content: center;
+}

@@ -1,0 +1,19 @@
+{
+  "id": "./",
+  "name": "quoridor — 2人で通路を作って陣地を目指す",
+  "short_name": "quoridor",
+  "description": "9x9マスの盤で駒を進めるか壁を置いて相手を妨げ、先に向こう側の端へ着いたら勝ちの陣取りゲーム。",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#2b2420",
+  "theme_color": "#2b2420",
+  "lang": "ja",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
