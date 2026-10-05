@@ -67,6 +67,8 @@ button { font: inherit; color: inherit; }
 .screen--game { height: 100%; min-height: 0; gap: 6px; }
 /* ホームでは対局中の盤をそのまま見せる（触っても動かない） */
 .screen--start { height: 100%; min-height: 0; gap: 10px; }
+/* ホームの盤は飾りなので小さめの正方形にして、ボタンを押し出さない */
+#homeBoard { flex: none; width: min(100%, 240px, 32vh); aspect-ratio: 1; min-height: 0; }
 
 .title { margin: 0; font-size: 28px; letter-spacing: 0.02em; }
 .sub { margin: 0; color: var(--muted); font-size: 14px; }
