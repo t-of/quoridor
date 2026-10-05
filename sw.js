@@ -9,7 +9,7 @@
 // ブラウザの HTTP キャッシュを通さない（install は reload、fetch は no-cache）。古い main.js と新しい index.html が混ざって動かなくなるのを防ぐ。
 
 const PREFIX = 'quoridor-';
-const VERSION = 'v3';
+const VERSION = 'v4';
 const CACHE = `${PREFIX}${VERSION}`;
 const FONT_CACHE = `${PREFIX}fonts`;
 
@@ -18,6 +18,7 @@ const SHELL = [
   './index.html',
   './style.css',
   './main.js',
+  './ai.js',
   './manifest.webmanifest',
   './webapp-kit/webapp-kit.css',
   './webapp-kit/webapp-kit.js',

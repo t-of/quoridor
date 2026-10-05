@@ -151,35 +151,31 @@ function doWall(pIdx, orient, r, c) {
   playTone(220, 0.07);
 }
 
-// ---- CPU（簡単: 相手が自分より近ければ、相手の最短路を一番伸ばす壁。なければ自分の最短路を進む） ----
+// ---- CPU（ai.js を Worker で動かす。反復深化のαβ探索＋置換表。UI を止めないよう別スレッドで考える） ----
+
+const cpu = new Worker('./ai.js', { type: 'module' });
+let cpuAsk = 0; // 対局をやり直したあとに、前の局の答えが届いても使わない
 
 function cpuTurn() {
   if (state.over) return;
-  const cpuDist = bfsDist(state.walls, state.pos[1], 8);
-  const playerDist = bfsDist(state.walls, state.pos[0], 0);
-  if (state.wallsLeft[1] > 0 && playerDist < cpuDist) {
-    const candidates = allLegalWalls(state.walls, state.pos);
-    let best = null, bestGain = 0;
-    for (const w of candidates) {
-      const next = new Set(state.walls);
-      next.add(wallSpan(w.orient, w.r, w.c)[1]);
-      const gain = bfsDist(next, state.pos[0], 0) - playerDist;
-      if (gain > bestGain || (gain === bestGain && gain > 0 && Math.random() < 0.3)) { best = w; bestGain = gain; }
-    }
-    if (best && bestGain > 0) {
-      doWall(1, best.orient, best.r, best.c);
-      render();
-      return;
-    }
-  }
-  const moves = legalMoves(state.walls, state.pos, 1);
-  let best = moves[0], bestDist = Infinity;
-  for (const m of moves) {
-    const d = bfsDist(state.walls, m, 8);
-    if (d < bestDist || (d === bestDist && Math.random() < 0.4)) { best = m; bestDist = d; }
-  }
-  doMove(1, best);
-  render();
+  const game = state;
+  const id = ++cpuAsk;
+  cpu.onmessage = (e) => {
+    if (e.data.id !== cpuAsk || state !== game) return;
+    const a = e.data.action;
+    if (a.type === 'move') doMove(1, [a.r, a.c]);
+    else doWall(1, a.orient, a.r, a.c);
+    render();
+    afterTurn();
+  };
+  cpu.postMessage({
+    id,
+    pos: state.pos,
+    wallsLeft: state.wallsLeft,
+    walls: [...state.walls],
+    turn: state.turn,
+    timeMs: 1500,
+  });
 }
 
 function afterTurn() {
