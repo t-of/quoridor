@@ -122,8 +122,6 @@ function newGame(vsCpu) {
     wallsLeft: [START_WALLS, START_WALLS],
     walls: new Set(),
     turn: 0,
-    mode: 'move',                  // 'move' | 'wall'
-    orient: 'v',
     preview: null,                 // { orient, r, c }
     over: false,
     winner: null,
@@ -199,8 +197,6 @@ const $board = document.getElementById('board');
 const $wallsTop = document.getElementById('wallsTop');
 const $wallsBottom = document.getElementById('wallsBottom');
 const $turnLabel = document.getElementById('turnLabel');
-const $modeBtn = document.getElementById('modeBtn');
-const $orientBtn = document.getElementById('orientBtn');
 const $resultText = document.getElementById('resultText');
 
 function track(i) { return i * 2 + 1; } // 0 始まりの盤目盛り i → グリッドの何本目か（1 始まり）
@@ -210,11 +206,8 @@ function render() {
   $wallsBottom.textContent = state.wallsLeft[0];
   const myTurn = !state.vsCpu || state.turn === 0;
   $turnLabel.textContent = state.over ? '' : (state.vsCpu ? (state.turn === 0 ? 'あなたの番' : 'CPU の番') : (state.turn === 0 ? 'プレイヤー1の番' : 'プレイヤー2の番'));
-  $modeBtn.textContent = state.mode === 'move' ? 'コマモード' : '壁モード';
-  $orientBtn.hidden = state.mode !== 'wall';
-  $orientBtn.textContent = state.orient === 'v' ? '縦向き' : '横向き';
 
-  const legal = (state.mode === 'move' && myTurn && !state.over) ? legalMoves(state.walls, state.pos, state.turn) : [];
+  const legal = (myTurn && !state.over) ? legalMoves(state.walls, state.pos, state.turn) : [];
   const legalKeys = new Set(legal.map(([i, j]) => `${i},${j}`));
 
   let html = '';
@@ -275,44 +268,56 @@ function previewCovers(orient, idx, pos, axis) {
 
 // ---- 操作 ----
 
+// マスをタップ → 進む。交点をタップ → 壁の仮置き、同じ交点をもう一度 → 向きを変える、すばやく 2 回 → 置く。
+// dblclick は iOS で来ないことがあるので、同じ交点への 350ms 以内の 2 回目を自分で見る。
+let lastTap = null; // { key, at, before }（before: 1 回目のタップの前に出ていた仮置き）
+
 $board.addEventListener('click', (e) => {
   if (state.over) return;
   const myTurn = !state.vsCpu || state.turn === 0;
   if (!myTurn) return;
   const cellEl = e.target.closest('[data-r]');
   const xEl = e.target.closest('[data-x]');
-  if (state.mode === 'move' && cellEl) {
+  if (xEl) {
+    if (state.wallsLeft[state.turn] <= 0) return;
+    const [r, c] = xEl.dataset.x.split(',').map(Number);
+    const key = xEl.dataset.x;
+    const now = performance.now();
+    if (lastTap && lastTap.key === key && now - lastTap.at < 350) {
+      // 2 回目のタップ: 1 回目で向きを変えていたら戻してから置く
+      const orient = lastTap.before && lastTap.before.r === r && lastTap.before.c === c ? lastTap.before.orient : state.preview.orient;
+      lastTap = null;
+      if (wallLegal(state.walls, state.pos, orient, r, c)) {
+        doWall(state.turn, orient, r, c);
+        render();
+        afterTurn();
+      } else {
+        state.preview = { orient, r, c };
+        render();
+      }
+      return;
+    }
+    lastTap = { key, at: now, before: state.preview };
+    if (state.preview && state.preview.r === r && state.preview.c === c) {
+      state.preview = { orient: state.preview.orient === 'v' ? 'h' : 'v', r, c };
+    } else {
+      // 新しい交点: 縦が置けなければ横を出す
+      const orient = !wallLegal(state.walls, state.pos, 'v', r, c) && wallLegal(state.walls, state.pos, 'h', r, c) ? 'h' : 'v';
+      state.preview = { orient, r, c };
+    }
+    render();
+  } else if (cellEl) {
     const r = Number(cellEl.dataset.r), c = Number(cellEl.dataset.c);
     const ok = legalMoves(state.walls, state.pos, state.turn).some(([i, j]) => i === r && j === c);
     if (ok) {
       doMove(state.turn, [r, c]);
       render();
       afterTurn();
-    }
-  } else if (state.mode === 'wall' && xEl) {
-    const [r, c] = xEl.dataset.x.split(',').map(Number);
-    if (state.preview && state.preview.r === r && state.preview.c === c && state.preview.orient === state.orient) {
-      if (state.wallsLeft[state.turn] > 0 && wallLegal(state.walls, state.pos, state.orient, r, c)) {
-        doWall(state.turn, state.orient, r, c);
-        render();
-        afterTurn();
-      }
-    } else {
-      state.preview = { orient: state.orient, r, c };
+    } else if (state.preview) {
+      state.preview = null;
       render();
     }
   }
-});
-
-$modeBtn.addEventListener('click', () => {
-  state.mode = state.mode === 'move' ? 'wall' : 'move';
-  state.preview = null;
-  render();
-});
-$orientBtn.addEventListener('click', () => {
-  state.orient = state.orient === 'v' ? 'h' : 'v';
-  state.preview = null;
-  render();
 });
 
 document.querySelectorAll('[data-start]').forEach((btn) => {

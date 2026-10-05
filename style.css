@@ -89,7 +89,7 @@ button { font: inherit; color: inherit; }
 }
 .info__walls b { color: var(--accent); }
 .info__turn { color: var(--muted); }
-.modebar { display: flex; gap: 8px; }
+.info__hint { color: var(--muted); font-size: 12px; text-align: right; }
 
 /* 盤：9 マス + マスの間の溝（壁置き場）を交互に並べた 17 本の目盛り */
 .board {
@@ -123,12 +123,12 @@ button { font: inherit; color: inherit; }
 .gap.preview { background: rgba(255, 107, 107, 0.5); }
 .gap.preview-ok { background: rgba(120, 220, 140, 0.7); }
 
-.xpt { position: relative; }
+.xpt { position: relative; z-index: 1; cursor: pointer; }
 .xpt::after {
   content: '';
   position: absolute;
   top: 50%; left: 50%;
-  width: 22px; height: 22px;
+  width: 26px; height: 26px;
   transform: translate(-50%, -50%);
 }
 
