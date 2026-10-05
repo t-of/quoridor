@@ -48,17 +48,17 @@
         <button class="big" data-start="pvp">2人で対戦（同じ端末）</button>
       </div>
 
-      <div id="game" class="screen" hidden>
+      <div id="game" class="screen screen--game" hidden>
         <div class="info info--top">
           <span class="info__walls">壁 <b id="wallsTop">10</b></span>
           <span class="info__turn" id="turnLabel"></span>
         </div>
 
-        <div class="board" id="board"></div>
+        <div class="board3d" id="board3d"></div>
 
         <div class="info info--bottom">
           <span class="info__walls">壁 <b id="wallsBottom">10</b></span>
-          <span class="info__hint">隣り合う溝を2つタップで壁を置く</span>
+          <span class="info__hint">ドラッグで回す・ピンチで寄る・隣り合う溝を2つタップで壁を置く</span>
         </div>
       </div>
 
@@ -74,6 +74,14 @@
   </main>
 
   <script src="./webapp-kit/webapp-kit.js"></script>
-  <script src="./main.js"></script>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+  <script type="module" src="./main.js"></script>
 </body>
 </html>

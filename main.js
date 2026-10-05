@@ -1,4 +1,7 @@
-'use strict';
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 
 WebAppKit.init({ title: 'quoridor', text: '9x9マスの盤で駒を進めるか壁を置いて相手を妨げ、先に向こう側の端へ着いたら勝ちの陣取りゲーム。' });
 
@@ -184,58 +187,22 @@ function afterTurn() {
   }
 }
 
-// ---- 描画 ----
+// ---- 描画（盤は three.js の 3D、情報欄だけ DOM） ----
 
 const $start = document.getElementById('start');
 const $game = document.getElementById('game');
 const $result = document.getElementById('result');
-const $board = document.getElementById('board');
+const $board3d = document.getElementById('board3d');
 const $wallsTop = document.getElementById('wallsTop');
 const $wallsBottom = document.getElementById('wallsBottom');
 const $turnLabel = document.getElementById('turnLabel');
 const $resultText = document.getElementById('resultText');
 
-function track(i) { return i * 2 + 1; } // 0 始まりの盤目盛り i → グリッドの何本目か（1 始まり）
-
 function render() {
   $wallsTop.textContent = state.wallsLeft[1];
   $wallsBottom.textContent = state.wallsLeft[0];
-  const myTurn = !state.vsCpu || state.turn === 0;
   $turnLabel.textContent = state.over ? '' : (state.vsCpu ? (state.turn === 0 ? 'あなたの番' : 'CPU の番') : (state.turn === 0 ? 'プレイヤー1の番' : 'プレイヤー2の番'));
-
-  const legal = (myTurn && !state.over) ? legalMoves(state.walls, state.pos, state.turn) : [];
-  const legalKeys = new Set(legal.map(([i, j]) => `${i},${j}`));
-
-  let html = '';
-  for (let i = 0; i < N; i++) {
-    for (let j = 0; j < N; j++) {
-      const classes = ['cell'];
-      if (i === 0) classes.push('goal0');
-      if (i === N - 1) classes.push('goal1');
-      if (legalKeys.has(`${i},${j}`)) classes.push('legal');
-      let inner = '';
-      if (state.pos[0][0] === i && state.pos[0][1] === j) inner = '<span class="piece p0"></span>';
-      else if (state.pos[1][0] === i && state.pos[1][1] === j) inner = '<span class="piece p1"></span>';
-      html += `<div class="${classes.join(' ')}" style="grid-row:${track(i)};grid-column:${track(j)}" data-r="${i}" data-c="${j}">${inner}</div>`;
-    }
-  }
-  // 溝（壁置き場）。data-e="o,a,b": 'v' は行 a の列 b/b+1 の間、'h' は行 a/a+1 の間の列 b
-  const sel = state.sel;
-  const gap = (o, a, b, has, row, col) => {
-    const on = sel && sel.o === o && sel.a === a && sel.b === b ? ' sel' : '';
-    return `<div class="gap gap-${o}${has ? ' wall' : on}" style="grid-row:${row};grid-column:${col}" data-e="${o},${a},${b}"></div>`;
-  };
-  for (let i = 0; i < N; i++) {
-    for (let c = 0; c < 8; c++) {
-      html += gap('v', i, c, state.walls.has(`v:${i}:${c}`) || state.walls.has(`v:${i - 1}:${c}`), track(i), track(c) + 1);
-    }
-  }
-  for (let r = 0; r < 8; r++) {
-    for (let j = 0; j < N; j++) {
-      html += gap('h', r, j, state.walls.has(`h:${r}:${j}`) || state.walls.has(`h:${r}:${j - 1}`), track(r) + 1, track(j));
-    }
-  }
-  $board.innerHTML = html;
+  syncScene();
 
   if (state.over) {
     $resultText.textContent = state.vsCpu
@@ -247,7 +214,7 @@ function render() {
   }
 }
 
-// ---- 操作 ----
+// ---- 操作（盤面の上のタップを判定するのは rules 側の関数のまま。入力元だけ 3D の raycaster） ----
 
 // マスをタップ → 進む。隣り合う溝を 2 つ続けてタップ → その 2 つをふさぐ壁を置く。
 // 2 つの溝が同じ線の上で隣り合っていれば、壁の向きと位置が 1 つに決まる。
@@ -258,39 +225,249 @@ function wallFromEdges(x, y) {
   return null;
 }
 
-$board.addEventListener('click', (e) => {
-  if (state.over) return;
+function tapCell(r, c) {
   const myTurn = !state.vsCpu || state.turn === 0;
-  if (!myTurn) return;
-  const edgeEl = e.target.closest('[data-e]');
-  const cellEl = e.target.closest('[data-r]');
-  if (edgeEl) {
-    if (state.wallsLeft[state.turn] <= 0 || edgeEl.classList.contains('wall')) return;
-    const [o, a, b] = edgeEl.dataset.e.split(',');
-    const edge = { o, a: Number(a), b: Number(b) };
-    const sel = state.sel;
-    const w = sel && wallFromEdges(sel, edge);
-    if (w && wallLegal(state.walls, state.pos, w.orient, w.r, w.c)) {
-      doWall(state.turn, w.orient, w.r, w.c);
-      render();
-      afterTurn();
-      return;
-    }
-    // 同じ溝なら選び直し、それ以外（離れている・置けない）はこの溝を 1 つ目にする
-    state.sel = sel && sel.o === edge.o && sel.a === edge.a && sel.b === edge.b ? null : edge;
+  if (state.over || !myTurn) return;
+  const ok = legalMoves(state.walls, state.pos, state.turn).some(([i, j]) => i === r && j === c);
+  if (ok) {
+    doMove(state.turn, [r, c]);
     render();
-  } else if (cellEl) {
-    const r = Number(cellEl.dataset.r), c = Number(cellEl.dataset.c);
-    const ok = legalMoves(state.walls, state.pos, state.turn).some(([i, j]) => i === r && j === c);
-    if (ok) {
-      doMove(state.turn, [r, c]);
-      render();
-      afterTurn();
-    } else if (state.sel) {
-      state.sel = null;
-      render();
+    afterTurn();
+  } else if (state.sel) {
+    state.sel = null;
+    render();
+  }
+}
+
+function tapEdge(o, a, b) {
+  const myTurn = !state.vsCpu || state.turn === 0;
+  if (state.over || !myTurn) return;
+  const has = o === 'v' ? (state.walls.has(`v:${a}:${b}`) || state.walls.has(`v:${a - 1}:${b}`)) : (state.walls.has(`h:${a}:${b}`) || state.walls.has(`h:${a}:${b - 1}`));
+  if (state.wallsLeft[state.turn] <= 0 || has) return;
+  const edge = { o, a, b };
+  const sel = state.sel;
+  const w = sel && wallFromEdges(sel, edge);
+  if (w && wallLegal(state.walls, state.pos, w.orient, w.r, w.c)) {
+    doWall(state.turn, w.orient, w.r, w.c);
+    render();
+    afterTurn();
+    return;
+  }
+  // 同じ溝なら選び直し、それ以外（離れている・置けない）はこの溝を 1 つ目にする
+  state.sel = sel && sel.o === edge.o && sel.a === edge.a && sel.b === edge.b ? null : edge;
+  render();
+}
+
+// ---- 3D の木の盤（three.js）。ドラッグで回す、ピンチで寄る ----
+// 9x9 のマスと、マスの間を彫った溝（壁置き場）。壁は溝に差し込む板として立体で置く。
+const CELL = 0.5;                 // マスの一辺
+const GAP = 0.12;                 // マスの間の溝の幅
+const PITCH = CELL + GAP;
+const BOARD_SIZE = N * PITCH - GAP;
+const pos1d = (i) => (i - 4) * PITCH;           // マス i（0..8）の中心座標
+const edgePos = (i) => (i - 4 + 0.5) * PITCH;   // 境界 i/i+1（0..7）の中心座標
+
+const canvas = document.createElement('canvas');
+canvas.className = 'board3d__canvas';
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+const scene = new THREE.Scene();
+scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
+const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 100);
+camera.position.set(0, 7.2, 6.7);
+const controls = new OrbitControls(camera, canvas);
+controls.enablePan = false;
+controls.minDistance = 5;
+controls.maxDistance = 16;
+controls.maxPolarAngle = Math.PI / 2 - 0.05; // 盤の下にはもぐらない
+controls.target.set(0, 0.3, 0);
+controls.update();
+controls.addEventListener('change', draw);
+
+// 影は付けない。環境光（RoomEnvironment）と弱い向きの光で質感を出す
+scene.add(new THREE.HemisphereLight(0xfff4e0, 0x3a2e24, 0.5));
+const sun = new THREE.DirectionalLight(0xffffff, 1.2);
+sun.position.set(3, 8, 4);
+scene.add(sun);
+
+// 木目（灰色の濃淡）。色はマテリアルの color で付ける
+function woodTexture() {
+  const S = 256;
+  const c = document.createElement('canvas');
+  c.width = c.height = S;
+  const g = c.getContext('2d');
+  const img = g.createImageData(S, S);
+  for (let y = 0; y < S; y++) {
+    for (let x = 0; x < S; x++) {
+      const t = (y + 9 * Math.sin((2 * Math.PI * x) / S * 2) + 3 * Math.sin((2 * Math.PI * x) / S * 7)) / S;
+      const ring = Math.pow(0.5 + 0.5 * Math.sin(2 * Math.PI * t * 14), 6);
+      const v = 255 * (0.9 - 0.16 * ring + (Math.random() - 0.5) * 0.05);
+      const p = (y * S + x) * 4;
+      img.data[p] = img.data[p + 1] = img.data[p + 2] = v;
+      img.data[p + 3] = 255;
     }
   }
+  g.putImageData(img, 0, 0);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.anisotropy = 4;
+  return tex;
+}
+const GRAIN = woodTexture();
+const wood = (color, o = {}) => new THREE.MeshPhysicalMaterial({
+  color, map: GRAIN, roughness: 0.5, clearcoat: 0.35, clearcoatRoughness: 0.35, envMapIntensity: 0.7, side: THREE.DoubleSide, ...o,
+});
+
+const board = new THREE.Mesh(new RoundedBoxGeometry(BOARD_SIZE + 0.3, 0.36, BOARD_SIZE + 0.3, 4, 0.14), wood(0x6a4329, { clearcoat: 0.5 }));
+board.position.y = -0.18;
+scene.add(board);
+
+const COLOR = { cell: 0x4a2e1c, goal0: 0x5b4522, goal1: 0x33465a, legal: 0x3f8a4f, groove: 0x24160d, grooveSel: 0xffd35c, wall: 0x8a5a34 };
+
+// 81 マス。立ち入れるマス 1 枚ずつが独立したメッシュ（タップの当たり判定も兼ねる）
+const cellGeo = new RoundedBoxGeometry(CELL, 0.03, CELL, 2, 0.03);
+const cellMeshes = [];
+for (let r = 0; r < N; r++) {
+  for (let c = 0; c < N; c++) {
+    const m = new THREE.Mesh(cellGeo, wood(COLOR.cell, { roughness: 0.7, clearcoat: 0 }));
+    m.position.set(pos1d(c), 0.015, pos1d(r));
+    m.userData = { type: 'cell', r, c };
+    scene.add(m);
+    cellMeshes.push(m);
+  }
+}
+
+// 溝（壁置き場）。縦の溝は行ごとに 1 区画、横の溝は列ごとに 1 区画。2 つ並べて壁になる
+const GROOVE_MAT = () => new THREE.MeshStandardMaterial({ color: COLOR.groove, roughness: 0.9 });
+const vGrooveGeo = new THREE.BoxGeometry(GAP + 0.08, 0.025, CELL * 0.92);
+const hGrooveGeo = new THREE.BoxGeometry(CELL * 0.92, 0.025, GAP + 0.08);
+const vEdgeMeshes = [];
+for (let i = 0; i < N; i++) {
+  for (let c = 0; c < N - 1; c++) {
+    const m = new THREE.Mesh(vGrooveGeo, GROOVE_MAT());
+    m.position.set(edgePos(c), 0.01, pos1d(i));
+    m.userData = { type: 'edge', o: 'v', a: i, b: c };
+    scene.add(m);
+    vEdgeMeshes.push(m);
+  }
+}
+const hEdgeMeshes = [];
+for (let r = 0; r < N - 1; r++) {
+  for (let j = 0; j < N; j++) {
+    const m = new THREE.Mesh(hGrooveGeo, GROOVE_MAT());
+    m.position.set(pos1d(j), 0.01, edgePos(r));
+    m.userData = { type: 'edge', o: 'h', a: r, b: j };
+    scene.add(m);
+    hEdgeMeshes.push(m);
+  }
+}
+const EDGE_MESHES = [...vEdgeMeshes, ...hEdgeMeshes];
+const RAYCAST_TARGETS = [...cellMeshes, ...EDGE_MESHES];
+
+// 壁板：溝 2 区画ぶんをまたいで差し込まれた木の板
+const WALL_LEN = 2 * CELL + GAP;
+const WALL_H = 0.34;
+const vWallGeo = new THREE.BoxGeometry(GAP * 1.3, WALL_H, WALL_LEN);
+const hWallGeo = new THREE.BoxGeometry(WALL_LEN, WALL_H, GAP * 1.3);
+const WALL_MAT = wood(COLOR.wall, { roughness: 0.55, clearcoat: 0.3 });
+let wallGroup = new THREE.Group();
+scene.add(wallGroup);
+function buildWalls() {
+  scene.remove(wallGroup);
+  wallGroup = new THREE.Group();
+  for (const key of state.walls) {
+    const [o, a, b] = key.split(':');
+    const r = Number(a), c = Number(b);
+    const m = new THREE.Mesh(o === 'v' ? vWallGeo : hWallGeo, WALL_MAT);
+    if (o === 'v') m.position.set(edgePos(c), WALL_H / 2, (pos1d(r) + pos1d(r + 1)) / 2);
+    else m.position.set((pos1d(c) + pos1d(c + 1)) / 2, WALL_H / 2, edgePos(r));
+    wallGroup.add(m);
+  }
+  scene.add(wallGroup);
+}
+
+// コマ：木でできた駒型（台座＋軸＋頭）。0 は明るい木、1 は青く染めた木
+const PIECE_WOOD = [wood(0xe8c98a), wood(0x3f6f95)];
+function pieceMesh(player) {
+  const g = new THREE.Group();
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.19, 0.08, 24), PIECE_WOOD[player]);
+  base.position.y = 0.04;
+  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.1, 0.22, 16), PIECE_WOOD[player]);
+  shaft.position.y = 0.19;
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.1, 16, 12), PIECE_WOOD[player]);
+  head.position.y = 0.4;
+  g.add(base, shaft, head);
+  return g;
+}
+let pieceGroup = new THREE.Group();
+scene.add(pieceGroup);
+function buildPieces() {
+  scene.remove(pieceGroup);
+  pieceGroup = new THREE.Group();
+  for (let p = 0; p < 2; p++) {
+    const [r, c] = state.pos[p];
+    const m = pieceMesh(p);
+    m.position.set(pos1d(c), 0.015, pos1d(r));
+    pieceGroup.add(m);
+  }
+  scene.add(pieceGroup);
+}
+
+function syncScene() {
+  const myTurn = !state.vsCpu || state.turn === 0;
+  const legal = (myTurn && !state.over) ? legalMoves(state.walls, state.pos, state.turn) : [];
+  const legalKeys = new Set(legal.map(([i, j]) => `${i},${j}`));
+  for (const m of cellMeshes) {
+    const { r, c } = m.userData;
+    let color = COLOR.cell;
+    if (r === 0) color = COLOR.goal0;
+    else if (r === N - 1) color = COLOR.goal1;
+    if (legalKeys.has(`${r},${c}`)) color = COLOR.legal;
+    m.material.color.setHex(color);
+  }
+  const sel = state.sel;
+  for (const m of EDGE_MESHES) {
+    const { o, a, b } = m.userData;
+    const has = o === 'v' ? (state.walls.has(`v:${a}:${b}`) || state.walls.has(`v:${a - 1}:${b}`)) : (state.walls.has(`h:${a}:${b}`) || state.walls.has(`h:${a}:${b - 1}`));
+    const isSel = sel && sel.o === o && sel.a === a && sel.b === b;
+    m.material.color.setHex(has ? COLOR.wall : isSel ? COLOR.grooveSel : COLOR.groove);
+    m.visible = !has; // 壁が刺さっている溝は板の裏に隠れるので消す
+  }
+  buildWalls();
+  buildPieces();
+  draw();
+}
+
+function draw() { renderer.render(scene, camera); }
+new ResizeObserver(() => {
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  if (!w || !h) return;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  // 縦長の画面でも盤の横が切れないように、縦の画角を広げる
+  camera.fov = w < h ? (2 * Math.atan(Math.tan((19 * Math.PI) / 180) * (h / w)) * 180) / Math.PI : 38;
+  camera.updateProjectionMatrix();
+  draw();
+}).observe(canvas);
+
+// 動かさずに離したらタップ（ドラッグは回転）
+let downAt = null;
+canvas.addEventListener('pointerdown', (e) => { downAt = [e.clientX, e.clientY]; });
+canvas.addEventListener('pointerup', (e) => {
+  if (!downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 6) return;
+  downAt = null;
+  if (!state || state.over) return;
+  const r = canvas.getBoundingClientRect();
+  const ray = new THREE.Raycaster();
+  ray.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), camera);
+  const hit = ray.intersectObjects(RAYCAST_TARGETS, false)[0];
+  if (!hit) return;
+  const d = hit.object.userData;
+  if (d.type === 'cell') tapCell(d.r, d.c);
+  else tapEdge(d.o, d.a, d.b);
 });
 
 document.querySelectorAll('[data-start]').forEach((btn) => {
@@ -299,6 +476,7 @@ document.querySelectorAll('[data-start]').forEach((btn) => {
     $start.hidden = true;
     $game.hidden = false;
     $result.hidden = true;
+    $board3d.appendChild(canvas);
     render();
   });
 });

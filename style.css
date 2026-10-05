@@ -21,7 +21,7 @@ button { font: inherit; color: inherit; }
 
 /* 画面の端に置くものはセーフエリアの分だけ内側に。高さは 100vh ではなく 100dvh */
 .app {
-  min-height: 100dvh;
+  height: 100dvh;
   display: flex;
   flex-direction: column;
   padding:
@@ -63,6 +63,8 @@ button { font: inherit; color: inherit; }
   width: 100%;
 }
 .screen[hidden] { display: none; }
+/* 対局中は盤を画面いっぱいに広げる */
+.screen--game { height: 100%; min-height: 0; gap: 6px; }
 
 .title { margin: 0; font-size: 28px; letter-spacing: 0.02em; }
 .sub { margin: 0; color: var(--muted); font-size: 14px; }
@@ -91,42 +93,8 @@ button { font: inherit; color: inherit; }
 .info__turn { color: var(--muted); }
 .info__hint { color: var(--muted); font-size: 12px; text-align: right; }
 
-/* 盤：9 マス + マスの間の溝（壁置き場）を交互に並べた 17 本の目盛り */
-.board {
-  --gap: 7px;
-  width: min(92vw, 420px);
-  aspect-ratio: 1;
-  display: grid;
-  grid-template-columns: repeat(8, 1fr var(--gap)) 1fr;
-  grid-template-rows: repeat(8, 1fr var(--gap)) 1fr;
-  position: relative;
-}
-
-.cell {
-  position: relative;
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 3px;
-}
-.cell.goal0 { background: rgba(255, 211, 92, 0.12); }
-.cell.goal1 { background: rgba(120, 180, 255, 0.12); }
-.cell.legal { background: rgba(120, 220, 140, 0.35); }
-.cell .piece {
-  position: absolute;
-  inset: 12%;
-  border-radius: 50%;
-}
-.cell .piece.p0 { background: var(--accent); }
-.cell .piece.p1 { background: #6fb3ff; }
-
-.gap { background: transparent; }
-.gap.wall { background: #ff6b6b; border-radius: 2px; }
-.gap.sel { background: rgba(120, 220, 140, 0.8); border-radius: 2px; }
-
-/* 溝は細いので、タップできる広さをマスの縁まで広げる */
-.gap[data-e] { position: relative; z-index: 1; cursor: pointer; }
-.gap[data-e]::after { content: ''; position: absolute; inset: 0; }
-.gap-v::after { left: -6px; right: -6px; }
-.gap-h::after { top: -6px; bottom: -6px; }
+.board3d { width: 100%; flex: 1; min-height: 200px; }
+.board3d__canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: grab; }
 
 .screen.overlay {
   position: absolute;
